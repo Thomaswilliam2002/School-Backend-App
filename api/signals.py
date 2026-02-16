@@ -34,15 +34,19 @@ def notify_eleve_change(sender, instance, created, **kwargs):
 
 @receiver(post_delete, sender=Inscrit)
 def notify_eleve_delete(sender, instance, **kwargs):
-    channel_layer = get_channel_layer()
-    etab_id = str(instance.etablissement.id_etab)
-    
-    async_to_sync(channel_layer.group_send)(
-        f'etablissement_{etab_id}',
-        {
-            "type": "eleve_event",
-            "action": "DELETE",
-            "eleve_id": str(instance.eleve.id_eleve)
-        }
-    )
+    try:
+        channel_layer = get_channel_layer()
+        etab_id = str(instance.etablissement.id_etab)
+        group_name = f'etablissement_{etab_id}'
+        
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                "type": "eleve_event",
+                "action": "DELETE",
+                "eleve_id": str(instance.eleve.id_eleve)
+            }
+        )
+    except Exception as e:
+        print(f"Erreur signal delete: {e}")
 

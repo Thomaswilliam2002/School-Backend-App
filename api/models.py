@@ -1,3 +1,4 @@
+import os
 from django.db import models
 from django.core.validators import FileExtensionValidator
 import uuid
@@ -9,25 +10,47 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 def upload_eleve_path(instance, filename):
     # Le dossier portera l'ID de l'élève : media/documents/eleves/<ID_ELEVE>/<NOM_FICHIER>
     # 1. On récupère l'id de l'élève
-    eleve_id = instance.eleve.id_eleve
+    eleve_nom = instance.eleve.nom
+    eleve_prenom = instance.eleve.prenom
+    
+    #renomer le fichier pour eviter les doublons et etre pressantable
+    #ecuprer l'extension
+    ext = os.path.splitext(filename)[1] # peux etre remplacer par 'filename.split('.')[-1]'
+    final_name = f"{instance.nom_fichier}{ext}" # pas besoint de metre '.' avent l'extension, la variable ext contien '.+extention
     
     # 2. On récupère l'id de l'établissement via la table Inscrit
     # On utilise .first() pour obtenir l'inscription active
     inscription = instance.eleve.inscrit_eleve.first() 
-    etab_id = inscription.etablissement.id_etab if inscription else "sans_etablissement"
-    return f'documents/{etab_id}/eleves/{eleve_id}/{filename}'
+    annee_scolaire = inscription.annee_scolaire.nom
+    classe = inscription.disponible.classe.code
+    etab_nom = inscription.etablissement.nom if inscription else "sans_etablissement"
+    return f'documents/{etab_nom}/eleves/{annee_scolaire}/{classe}/{eleve_nom} {eleve_prenom}/{final_name}'
 
 def upload_enseignant_path(instance, filename):
-    enseignant_id = instance.enseignant.id_ens
+    enseignant_nom = instance.enseignant.nom
+    enseignant_prenom = instance.enseignant.prenom
+    
+    ext = os.path.splitext(filename)[1]
+    final_name = f"{instance.nom_fichier}{ext}"
+    
     enseigne = instance.enseignant.enseigne_enseignant.first()
-    etab_id = enseigne.etablissement.id_etab if enseigne else "sans_etablissement"
-    return f'documents/{etab_id}/enseignants/{enseignant_id}/{filename}'
+    annee_scolaire = enseigne.annee_scolaire.nom
+    
+    etab_nom = enseigne.etablissement.nom if enseigne else "sans_etablissement"
+    return f'documents/{etab_nom}/enseignants/{annee_scolaire}/{enseignant_nom} {enseignant_prenom}/{final_name}'
 
 def upload_staff_path(instance, filename):
-    staff_id = instance.staff.id_staff
-    occupe = instance.staff.staff_occupations
-    etab_id = occupe.etablissement.id_etab if occupe else "sans_etablissement"
-    return f'documents/{etab_id}/staffs/{staff_id}/{filename}'
+    staff_nom = instance.staff.nom
+    staff_prenom = instance.staff.prenom
+    
+    ext = os.path.splitext(filename)[1]
+    final_name = f"{instance.nom_fichier}{ext}"
+    
+    occupe = instance.staff.staff_occupations.first()
+    annee_scolaire = occupe.annee_scolaire.nom
+    
+    etab_nom = occupe.etablissement.nom if occupe else "sans_etablissement"
+    return f'documents/{etab_nom}/staffs/{annee_scolaire}/{staff_nom} {staff_prenom}/{final_name}'
 
 def upload_etablissement_path(instance, filename):
     etab_id = instance.etablissement.id_etab
@@ -37,11 +60,15 @@ class User(AbstractUser):
     email = models.EmailField(unique=True)
     
 class Etablissement(models.Model):
+    TYPE_CHOICES = [
+        ('PRIVE', 'Privé'),
+        ('PUBLIC', 'Public'),
+    ]
     id_etab = models.UUIDField(primary_key=True, default= uuid.uuid4, editable= False)
     nom = models.CharField(max_length=500)
     adresse = models.CharField(max_length=500)
     code = models.CharField(max_length=20, unique=True)  # sera utiliser au moment de la connexion d'un staff a sonr etablissement
-    type = models.CharField(max_length=20)
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='PRIVE')
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True) # Pour suspendre une école
     
@@ -77,10 +104,7 @@ class Enseignant(models.Model):
     date = models.DateField(null= True, blank=True)
     tel1 = models.CharField(max_length=20,null= True, blank=True)
     tel2 = models.CharField(max_length=20,null= True, blank=True)
-    #email = models.EmailField(null= True, blank=True)
     adresse = models.CharField(max_length=500,null= True, blank=True)
-    # photo = models.FileField(upload_to='documents/photos/enseignant/photo', null=True, blank=True) # Accepte Photo, PDF, Vidéo, etc.
-    # photo = models.ImageField(upload_to='photos/', null= True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     class Meta:
@@ -92,6 +116,7 @@ class Enseignant(models.Model):
 
 class Eleve(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='eleve_profile', null=True, blank=True)
+    matricule = models.CharField(max_length=20,null= True, blank=True)
     id_eleve = models.UUIDField(primary_key=True, default= uuid.uuid4, editable= False)
     nom = models.CharField(max_length=50,null= True, blank=True)
     prenom = models.CharField(max_length=100,null= True, blank=True)
@@ -181,10 +206,25 @@ class Staff(models.Model):
     def __str__(self):
         return f"{self.nom}"
     
+class NiveauEtude(models.Model):
+    id_niveau = models.UUIDField(primary_key=True, default= uuid.uuid4, editable= False)
+    nom = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'niveaux'
+        ordering = ['-created_at']
+        
+    def __str__(self):
+        return f"{self.nom}"
+
+    
 class Classe(models.Model):
     id_classe = models.UUIDField(primary_key=True, default= uuid.uuid4, editable= False)
     nom = models.CharField(max_length=200)
     code = models.CharField(max_length=50)
+    niveau = models.ForeignKey(NiveauEtude, on_delete=models.CASCADE, related_name='classe_niveau', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -200,7 +240,7 @@ class Cour(models.Model):
     enseignant = models.ForeignKey(Enseignant, on_delete=models.CASCADE, related_name='cour_enseignant')
     etablissement = models.ForeignKey(Etablissement, on_delete=models.CASCADE, related_name='cour_etablissement')
     matiere = models.ForeignKey(Matiere, on_delete=models.CASCADE, related_name='cour_matiere')
-    classe = models.ForeignKey(Classe, on_delete=models.CASCADE, related_name='cour_classe')
+    disponible = models.ForeignKey('Disponible', on_delete=models.CASCADE, related_name='cour_disponible')
     coefficient = models.PositiveIntegerField()
     annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.CASCADE, related_name='cour_annee_scolaire')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -218,6 +258,7 @@ class Disponible(models.Model):
     etablissement = models.ForeignKey(Etablissement, on_delete=models.CASCADE, related_name='disponible_etablissement')
     classe = models.ForeignKey(Classe, on_delete=models.CASCADE, related_name='disponible_classe')
     scolarite = models.DecimalField(max_digits=12, decimal_places=2)
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     
@@ -232,6 +273,10 @@ class Enseigne(models.Model):
     id_enseigne = models.UUIDField(primary_key=True, default= uuid.uuid4, editable= False)
     etablissement = models.ForeignKey(Etablissement, on_delete=models.CASCADE, related_name='enseigne_etablissement')
     enseignant = models.ForeignKey(Enseignant, on_delete=models.CASCADE, related_name='enseigne_enseignant')
+    type = models.CharField(max_length=50,null= True, blank=True)
+    periode = models.CharField(max_length=50,null= True, blank=True)
+    salaire = models.DecimalField(max_digits=12, decimal_places=2)
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.CASCADE, related_name='enseigne_annee_scolaire')
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     
@@ -245,7 +290,7 @@ class Enseigne(models.Model):
 class Inscrit(models.Model):
     id_inscrit = models.UUIDField(primary_key=True, default= uuid.uuid4, editable= False)
     etablissement = models.ForeignKey(Etablissement, on_delete=models.CASCADE, related_name='inscrit_etablissement')
-    classe = models.ForeignKey(Classe, on_delete=models.CASCADE, related_name='inscrit_classe')
+    disponible = models.ForeignKey(Disponible, on_delete=models.CASCADE, related_name='inscrit_disponible')
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='inscrit_eleve')
     annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -266,6 +311,7 @@ class Presence(models.Model):
     date = models.DateField(null= True, blank=True)
     status = models.CharField(max_length=15,null= True, blank=True, default='PRESENT')
     commentaire = models.TextField(null=True, blank=True) # Pour le motif du retard/absence
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -282,50 +328,21 @@ class Evaluation(models.Model):
     typeEval = models.CharField(max_length=100)
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='evaluation_eleve')
     cour = models.ForeignKey(Cour, on_delete=models.CASCADE, related_name='evaluation_cour')
-    date = models.DateField(null= True, blank=True)
+    date_evaluation  = models.DateField(null= True, blank=True)
+    date_remise = models.DateField(null= True, blank=True)
+    date_enregisttrement = models.DateField(null= True, blank=True)
     note = models.DecimalField(max_digits=5, decimal_places=2,null= True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(20)])
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
     periode = models.PositiveSmallIntegerField(help_text="1 pour Trim1/Sem1, 2 pour Trim2/Sem2, etc.")
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
         db_table = 'evaluations'
         ordering = ['-created_at']
-        # Unicité pour éviter les doublons de saisie pour une même éval
-        unique_together = ('eleve', 'cour', 'typeEval', 'periode', 'date')
         
     def __str__(self):
         return f"{self.id_eval}"
-    
-# class Interrogation(models.Model):
-#     id_interro = models.UUIDField(primary_key=True, default= uuid.uuid4, editable= False)
-#     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='interrogation_eleve')
-#     cour = models.ForeignKey(Cour, on_delete=models.CASCADE, related_name='interrogation_cour')
-#     date = models.DateField(null= True, blank=True)
-#     note = models.DecimalField(max_digits=5, decimal_places=2,null= True, blank=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-    
-#     class Meta:
-#         db_table = 'interrogations'
-#         ordering = ['-created_at']
-        
-#     def __str__(self):
-#         return f"{self.id_interro}"
-    
-# class Devoir(models.Model):
-#     id_devoir = models.UUIDField(primary_key=True, default= uuid.uuid4, editable= False)
-#     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='devoir_eleve')
-#     cour = models.ForeignKey(Cour, on_delete=models.CASCADE, related_name='devoir_cour')
-#     date = models.DateField(null= True, blank=True)
-#     note = models.DecimalField(max_digits=5, decimal_places=2,null= True, blank=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-    
-#     class Meta:
-#         db_table = 'devoirs'
-#         ordering = ['-created_at']
-        
-#     def __str__(self):
-#         return f"{self.id_devoir}"
-    
+  
 class Depense(models.Model):
     id_depense = models.UUIDField(primary_key=True, default= uuid.uuid4, editable= False)
     etablissement = models.ForeignKey(Etablissement, on_delete=models.CASCADE, related_name='depense_etablissement')
@@ -337,6 +354,8 @@ class Depense(models.Model):
     
     description = models.TextField(null=True, blank=True)
     justificatif = models.FileField(upload_to='depenses/justificatifs/', null=True, blank=True)
+    
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
     
     # Pour savoir quel membre du staff a fait la saisie
     enregistre_par = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True)
@@ -355,7 +374,9 @@ class Occupe(models.Model):
     etablissement = models.ForeignKey(Etablissement, on_delete=models.CASCADE, related_name='staff_etablissement')
     poste = models.ForeignKey(Poste, on_delete=models.CASCADE)
     salaire = models.DecimalField(max_digits=10, decimal_places=2)
-    date_debut = models.DateField(auto_now_add=True)
+    date_debut = models.DateField()
+    date_fin = models.DateField(null=True, blank=True)
+    # annee_scolaire = models.CharField(max_length=10, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -373,14 +394,16 @@ class DocumentEleve(models.Model):
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='documents_eleve')
     titre = models.CharField(max_length=200) # ex: "Certificat Médical", "Photo de profil"
     description = models.TextField(null=True, blank=True)
+    nom_fichier = models.CharField(max_length=255, null=True, blank=True)
     # FileField accepte TOUT. On peut restreindre les extensions si besoin.
     # fichier = models.FileField(
     #     upload_to='pieces_jointes/%Y/%m/%d/', 
     #     validators=[FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'png', 'mp4', 'mp3', 'docx'])]
     # )
-    fichier = models.FileField(upload_to=upload_eleve_path)
+    fichier = models.FileField(upload_to=upload_eleve_path, max_length=700)
     
     type_fichier = models.CharField(null=True, max_length=20) # 'IMAGE', 'PDF', 'VIDEO', etc.
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -396,8 +419,10 @@ class DocumentEnseignant(models.Model):
     enseignant = models.ForeignKey(Enseignant, on_delete=models.CASCADE, related_name='documents_enseignant')
     titre = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True)
-    fichier = models.FileField(upload_to=upload_enseignant_path)
+    nom_fichier = models.CharField(max_length=255, null=True, blank=True)
+    fichier = models.FileField(upload_to=upload_enseignant_path, max_length=700)
     type_fichier = models.CharField(max_length=20) # 'IMAGE', 'PDF', 'VIDEO', etc.
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
     is_active = models.BooleanField(null=True, default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -413,8 +438,10 @@ class DocumentStaff(models.Model):
     staff = models.ForeignKey(Staff, on_delete=models.CASCADE, related_name='documents_staff')
     titre = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True)
-    fichier = models.FileField(upload_to=upload_staff_path)
+    nom_fichier = models.CharField(max_length=255, null=True, blank=True)
+    fichier = models.FileField(upload_to=upload_staff_path, max_length=700)
     type_fichier = models.CharField(null=True, max_length=20) # 'IMAGE', 'PDF', 'VIDEO', etc.
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -430,8 +457,10 @@ class DocumentEtablissement(models.Model):
     etablissement = models.ForeignKey(Etablissement, on_delete=models.CASCADE, related_name='documents_etablissement')
     titre = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True)
-    fichier = models.FileField(upload_to=upload_etablissement_path)
+    nom_fichier = models.CharField(max_length=255, null=True, blank=True)
+    fichier = models.FileField(upload_to=upload_etablissement_path, max_length=700)
     type_fichier = models.CharField(null=True, max_length=20) # 'IMAGE', 'PDF', 'VIDEO', etc.
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -446,8 +475,10 @@ class Bibliotheque(models.Model):
     id_doc = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     titre = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True)
+    nom_fichier = models.CharField(max_length=255, null=True, blank=True)
     fichier = models.FileField(upload_to='documents/photos/eleve/photo/')
     type_fichier = models.CharField(null=True, max_length=20) # 'IMAGE', 'PDF', 'VIDEO', etc.
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -481,6 +512,8 @@ class Message(models.Model):
     # Date et heure de l'envoi
     date = models.DateField(null= True, blank=True)
     heure = models.TimeField(null= True, blank=True)
+    
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
 
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -493,23 +526,15 @@ class Message(models.Model):
         return f"{self.id_msg}"
     
 class EmploiDuTemps(models.Model):
-    JOURS_CHOICES = [
-        ('LUN', 'Lundi'),
-        ('MAR', 'Mardi'),
-        ('MER', 'Mercredi'),
-        ('JEU', 'Jeudi'),
-        ('VEN', 'Vendredi'),
-        ('SAM', 'Samedi'),
-        ('DIM', 'Dimanche'),
-    ]
-
     id_emploi = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     etablissement = models.ForeignKey(Etablissement, on_delete=models.CASCADE)
     cour = models.ForeignKey(Cour, on_delete=models.CASCADE, related_name='horaires_cour')
-    
-    jour = models.CharField(max_length=3, choices=JOURS_CHOICES)
+    # classe = models.ForeignKey(Classe, on_delete=models.CASCADE, related_name='horaires_classe')
+    disponible  = models.ForeignKey(Disponible, on_delete=models.CASCADE, related_name='horaires_disponible')
+    jour = models.CharField(max_length=20, null=True, blank=True)
     heure_debut = models.TimeField()
     heure_fin = models.TimeField()
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
     #salle = models.CharField(max_length=100, null=True, blank=True) # Optionnel
     
     is_active = models.BooleanField(default=True)
@@ -522,3 +547,25 @@ class EmploiDuTemps(models.Model):
 
     def __str__(self):
         return f"{self.cour} - {self.jour} ({self.heure_debut}-{self.heure_fin})"
+    
+class Scolarite(models.Model):
+    inscrit = models.ForeignKey(
+        Inscrit,
+        on_delete=models.CASCADE,
+        related_name='scolarites',
+    )
+    tranche = models.CharField(max_length=50)  # ex: "1ère tranche"
+    montant = models.DecimalField(max_digits=10, decimal_places=2)
+    date_paiement = models.DateField(auto_now_add=True)
+    reference = models.CharField(max_length=100, null=True, blank=True)
+    annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.SET_NULL, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'scolarites'
+        ordering = ['-date_paiement']
+
+    def __str__(self):
+        return f"{self.inscrit} - {self.tranche} ({self.montant})"
+    

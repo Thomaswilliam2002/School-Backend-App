@@ -19,6 +19,7 @@ import os
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
+from middleware import TokenAuthMiddleware
 from api.routing import websocket_urlpatterns
 
 #on definit les regles par defaut de django
@@ -29,7 +30,7 @@ application = ProtocolTypeRouter({
     # 1️⃣ Pour les requêtes HTTP normales (Django classique)
     "http": get_asgi_application(),
     # 2️⃣ Pour les connexions WebSocket
-    "websocket": AuthMiddlewareStack(
+    "websocket": TokenAuthMiddleware(
         URLRouter(
             websocket_urlpatterns
         )

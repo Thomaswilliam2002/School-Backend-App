@@ -1,11 +1,17 @@
 from rest_framework import serializers
 from .models import *
 
+class AnneeScolaireSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = AnneeScolaire
+        fields = "__all__"
+        read_only_fields = ["created_at"]
+        
 class EtablissementSerializers(serializers.ModelSerializer):
     class Meta:
         model = Etablissement
-        fields = ["id_etab", "nom", "adresse", "is_active", "created_at"]
-        read_only_fields = ["id_etab", "created_at"]
+        fields = ["id_etab", "nom", "adresse", "code", "type", "is_active", "created_at"]
+        read_only_fields = ["id_etab", "code", "created_at"]
         
 class EnseignantSerializers(serializers.ModelSerializer):
     # On récupère l'email via la relation 'user' du modèle Eleve
@@ -21,26 +27,41 @@ class EleveSerializers(serializers.ModelSerializer):
     matricule = serializers.ReadOnlyField(source='user.username')
     class Meta:
         model = Eleve
-        fields = ["id_eleve", "nom", "prenom","genre", "date", "matricule", "nom_prenom_parent_1", "tel1", "nom_prenom_parent_2", "tel2",
+        fields = ["id_eleve", "nom", "matricule", "prenom","genre", "date", "matricule", "nom_prenom_parent_1", "tel1", "nom_prenom_parent_2", "tel2",
                   "email_parent_1", "email_parent_2", "adresse", "is_active", "created_at"]
         read_only_fields = ["id_eleve", "created_at"]
         
 class MatiereSerializers(serializers.ModelSerializer):
     class Meta:
         model = Matiere
-        fields = ["id_matiere", "nom", "created_at"]
+        fields = ["id_matiere", "nom", "code", "created_at"]
         read_only_fields = ["created_at"]
         
 class PosteSerializers(serializers.ModelSerializer):
     class Meta:
         model = Poste
-        fields = ["id_poste", "nom", "created_at"]
+        fields = ["id_poste", "nom", "code", "created_at"]
+        read_only_fields = ["created_at"]
+        
+class NiveauEtudeSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = NiveauEtude
+        fields = "__all__"
         read_only_fields = ["created_at"]
         
 class ClasseSerializers(serializers.ModelSerializer):
+    # Ce champ sert à la LECTURE (GET) pour voir le nom du niveau
+    niveau_details = NiveauEtudeSerializers(read_only=True)
+    niveau = NiveauEtudeSerializers(read_only=True)
+    
+    # On laisse 'niveau' se gérer automatiquement pour l'ÉCRITURE (POST)
+    # ou on le définit explicitement si nécessaire :
+    # niveau = serializers.PrimaryKeyRelatedField(queryset=NiveauEtude.objects.all())
+
     class Meta:
         model = Classe
-        fields = ["id_classe", "nom", "created_at"]
+        # On inclut 'niveau' pour l'ID et 'niveau_details' pour l'affichage
+        fields = ["id_classe", "nom", "code", "niveau", "niveau_details", "created_at"]
         read_only_fields = ["created_at"]
         
 class StaffSerializers(serializers.ModelSerializer):
@@ -49,51 +70,53 @@ class StaffSerializers(serializers.ModelSerializer):
     username = serializers.ReadOnlyField(source='user.username')
     class Meta:
         model = Staff
-        fields = ["id_staff", "nom", "prenom", "date", "tel1", "tel2", "email", "username", "adresse", "poste", "status", "is_active", "created_at"]
+        fields = ["id_staff", "nom", "prenom", "date", "tel1", "tel2", "sexe", "email", "username", "adresse", "status", "is_active", "created_at"]
         read_only_fields = ["id_staff", "created_at"]
-        
-class CoursSerializers(serializers.ModelSerializer):
-    enseignant_datail = EnseignantSerializers(source = 'enseignant',read_only = True)
-    # enseignant_id = serializers.PrimaryKeyRelatedField(queryset= Enseignant.objects.all(), pk_field = serializers.UUIDField(), write_only = True)
-    matiere_datail = MatiereSerializers(source = "matiere",read_only = True)
-    # matiere_id = serializers.PrimaryKeyRelatedField(queryset= Matiere.objects.all(), pk_field = serializers.UUIDField(), write_only = True)
-    classe_datail = ClasseSerializers(source = "classe",read_only = True)
-    # classe_id = serializers.PrimaryKeyRelatedField(queryset= Classe.objects.all(), pk_field = serializers.UUIDField(), write_only = True)
-    class Meta:
-        model = Cour
-        fields = ["id_cours", "nom", "enseignant", "enseignant_datail", "matiere", "matiere_datail", "classe", "classe_datail", "coefficient", "created_at"]
-        read_only_fields = ["id_cours", "created_at"]
-        
+
 class DisponibleSerializers(serializers.ModelSerializer):
-    etablissement_datail = EtablissementSerializers(source = "etablissement", read_only = True)
-    # etablissement_id = serializers.PrimaryKeyRelatedField(queryset= Etablissement.objects.all(), pk_field = serializers.UUIDField(), write_only = True)
-    classe_datail = ClasseSerializers(source = "classe",read_only = True)
-    # classe_id = serializers.PrimaryKeyRelatedField(queryset= Classe.objects.all(), pk_field = serializers.UUIDField(), write_only = True)
+    etablissement = EtablissementSerializers(read_only = True)
+    classe = ClasseSerializers(read_only = True)
+    annee_scolaire = AnneeScolaireSerializers(read_only = True)
     class Meta:
         model = Disponible
-        fields = ["id_disponible", "etablissement", "etablissement_datail", "classe", "classe_datail", "created_at"]
+        fields =  "__all__" #["id_disponible", "etablissement", "classe", "is_active", "created_at"]
         read_only_fields = ["id_disponible", "created_at"]
+         
+class CoursSerializers(serializers.ModelSerializer):
+    enseignant = EnseignantSerializers(read_only = True) # 'source = 'enseignant'' facultatif
+    matiere = MatiereSerializers(read_only = True)
+    disponible = DisponibleSerializers(read_only = True)
+    annee_scolaire = AnneeScolaireSerializers(read_only = True)
+    class Meta:
+        model = Cour
+        fields = "__all__" #["id_cours", "nom", "enseignant", "matiere", "classe", "coefficient", "created_at"]
+        read_only_fields = ["id_cours", "created_at"]
         
 class EnseigneSerializers(serializers.ModelSerializer):
-    etablissement_datail = EtablissementSerializers(source = "etablissement", read_only = True)
-    # etablissement_id = serializers.PrimaryKeyRelatedField(queryset= Etablissement.objects.all(), pk_field = serializers.UUIDField(), write_only = True)
-    enseignant_datail = EnseignantSerializers(source = 'enseignant',read_only = True)
-    # enseignant_id = serializers.PrimaryKeyRelatedField(queryset= Enseignant.objects.all(), pk_field = serializers.UUIDField(), write_only = True)
+    etablissement = EtablissementSerializers(read_only = True)
+    enseignant = EnseignantSerializers(read_only = True)
+    annee_scolaire = AnneeScolaireSerializers(read_only = True)
     class Meta:
         model = Enseigne
-        fields = ["id_enseigne", "enseignant", "enseignant_datail", "etablissement", "etablissement_datail", "created_at"]
+        fields = "__all__" #["id_enseigne", "enseignant", "etablissement", "created_at"]
         read_only_fields = ["id_enseigne", "created_at"]
         
+class ScolariteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Scolarite
+        fields = "__all__"
+        read_only_fields = ['id', 'date_paiement']
+        
 class InscritSerializers(serializers.ModelSerializer):
-    etablissement_datail = EtablissementSerializers(source = "etablissement", read_only = True)
-    # etablissement_id = serializers.PrimaryKeyRelatedField(queryset= Etablissement.objects.all(), pk_field = serializers.UUIDField(), write_only = True)
-    eleve_datail = EleveSerializers(source = "eleve", read_only = True)
-    # eleve_id = serializers.PrimaryKeyRelatedField(queryset= Eleve.objects.all(), pk_field = serializers.UUIDField(), write_only = True)
-    classe_datail = ClasseSerializers(source = "classe",read_only = True)
-    # classe_id = serializers.PrimaryKeyRelatedField(queryset= Classe.objects.all(), pk_field = serializers.UUIDField(), write_only = True)
+    #etablissement_datail = EtablissementSerializers(source = "etablissement", read_only = True)
+    etablissement = EtablissementSerializers(read_only = True) #, "etablissement_datail"
+    #eleve_datail = EleveSerializers(source = "eleve", read_only = True) #, "eleve_datail"
+    eleve = EleveSerializers(read_only = True) #✅tu veux utiliser ca(ce format) pour le detail de l'eleve au lieux de eleve_datail. tu peux aussi te passer de 'source = "eleve"'
+    disponible = DisponibleSerializers(read_only = True)
+    scolarites = ScolariteSerializer(many=True, read_only=True) #(meny = True) paermet de recuperer plusieurs scolarites
     class Meta:
         model = Inscrit
-        fields = ["id_inscrit", "etablissement", "etablissement_datail", "classe", "classe_datail", "eleve", "eleve_datail", "is_active", "created_at"]
+        fields = "__all__" #["id_inscrit", "etablissement", "disponible", "eleve", "scolarites", "is_active", "created_at"]
         read_only_fields = ["created_at"]
         
 class PresenceSerializers(serializers.ModelSerializer):
@@ -104,11 +127,11 @@ class PresenceSerializers(serializers.ModelSerializer):
         read_only_fields = ["created_at"]
         
 class EvaluationSerializers(serializers.ModelSerializer):
-    cour_datail = CoursSerializers(source = "cour",read_only = True)
-    eleve_datail = EleveSerializers(source = "eleve", read_only = True)
+    eleve = EleveSerializers(read_only = True)
+    cour = CoursSerializers(read_only = True)
     class Meta:
         model = Evaluation
-        fields = list([f.name for f in Evaluation._meta.fields]) + ["cour_datail", "eleve_datail"] #"__all__"
+        fields = "__all__"
         read_only_fields = ["created_at"]
 
 class DepenseSerializers(serializers.ModelSerializer):
@@ -119,19 +142,19 @@ class DepenseSerializers(serializers.ModelSerializer):
         read_only_fields = ["created_at"]
         
 class OccupeSerializers(serializers.ModelSerializer):
-    etablissement_datail = EtablissementSerializers(source = "etablissement", read_only = True)
-    staff_detail = StaffSerializers(source = "staff", read_only = True)
-    poste_detail = PosteSerializers(source = "poste", read_only = True)
+    etablissement = EtablissementSerializers(source = "etablissement", read_only = True)
+    staff = StaffSerializers(source = "staff", read_only = True)
+    poste = PosteSerializers(source = "poste", read_only = True)
     class Meta:
         model = Occupe
-        fields = list([f.name for f in Occupe._meta.fields]) + ["etablissement_datail", "staff_detail", "poste_detail"] #"__all__"
+        fields = "__all__" # list([f.name for f in Occupe._meta.fields])
         read_only_fields = ["created_at"]
         
 class DocumentEleveSerializers(serializers.ModelSerializer):
-    eleve_datail = EleveSerializers(source = "eleve", read_only = True)
+    eleve = EleveSerializers(source = "eleve", read_only = True)
     class Meta:
         model = DocumentEleve
-        fields = list([f.name for f in DocumentEleve._meta.fields]) + ["eleve_datail"]
+        fields = "__all__" #list([f.name for f in DocumentEleve._meta.fields])
         #fields = "__all__"
         read_only_fields = ["created_at"]
         
@@ -187,21 +210,21 @@ class MessageSerializers(serializers.ModelSerializer):
         
 class EmploiDuTempsSerializers(serializers.ModelSerializer):
     # Ce champ permet d'afficher "Lundi" au lieu de "LUN" dans les réponses GET
-    jour_display = serializers.CharField(source='get_jour_display', read_only=True)
+    # jour_display = serializers.CharField(source='get_jour_display', read_only=True)
+    etablissement = EtablissementSerializers(read_only = True)
+    cour = CoursSerializers(read_only = True)
+    disponible = DisponibleSerializers(read_only = True)
+    annee_scolaire = AnneeScolaireSerializers(read_only = True)
 
     class Meta:
         model = EmploiDuTemps
-        fields = ['id_emploi', 'cour', 'jour', 'jour_display', 'heure_debut', 'heure_fin']
+        fields = "__all__"
         read_only_fields = ["created_at"]
         
 class AnneeScolaireSerializers(serializers.ModelSerializer):
+    etablissement = serializers.PrimaryKeyRelatedField(read_only=True)
     class Meta:
         model = AnneeScolaire
         fields = "__all__"
         read_only_fields = ["created_at"]
         
-# class DevoirSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = Devoir
-#         fields = "__all__"
-#         read_only_fields = ["created_at"]

@@ -13,6 +13,12 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+from datetime import timedelta
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / '.env')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,10 +28,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-ja-$@f=q_hb(1802970mhg-qy!k^+3j+c%^_)xye=!c&f)ynty'
+SECRET_KEY = os.getenv("SECRET_KEY") #'django-insecure-ja-$@f=q_hb(1802970mhg-qy!k^+3j+c%^_)xye=!c&f)ynty'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG")
 
 # ALLOWED_HOSTS = [
 #     "localhost",
@@ -51,11 +57,33 @@ INSTALLED_APPS = [
     #mes applications
     'api.apps.ApiConfig',
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders',
     
     #le moteur temps reel
     'channels',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    # Optionnel : pour forcer l'utilisateur à être connecté partout
+    # 'DEFAULT_PERMISSION_CLASSES': [
+    #     'rest_framework.permissions.IsAuthenticated',
+    # ],
+}
+
+#Configuration optionnelle pour la durée des tokens
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
+# 3. Ajouter la configuration de sécurité pour tes WebSockets (CSP) : '127.0.0.1:8000' sinon 'localhost' est bloqué.
+# On va autoriser les deux par précaution.
+CSP_CONNECT_SRC = ("'self'", "http://127.0.0.1:8000", "ws://127.0.0.1:8000", "http://localhost:8000", "ws://localhost:8000")
 
 CORS_ALLOW_ALL_ORIGINS = True
 
@@ -169,7 +197,20 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-AUTH_USER_MODEL = 'accounts.User'
+AUTH_USER_MODEL = 'api.User'
+
+# CONFIGURATION Email
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+EMAIL_HOST = os.getenv("EMAIL_HOST")
+EMAIL_PORT = os.getenv("EMAIL_PORT")
+EMAIL_USE_TLS = True
+
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

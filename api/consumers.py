@@ -10,13 +10,13 @@ class EtablissementConsumer(AsyncJsonWebsocketConsumer):
         
         #recuperer les infos de celui qui envois la requete
         self.user = self.scope['user']
-        print(self.user)
+        print(f"user = {self.user.user.username} | {self.user.user.email} | {self.user.nom} | {self.user.prenom}")
         
         # Le nom du groupe est unique à l'établissement pour l'isolation
         self.room_group_name = f'etablissement_{self.etab_id}'
         
         # 1. Vérification de l'authentification de base / Vérification de l'accès (Logique SaaS)
-        if self.user.is_anonymous:
+        if not self.user.user or self.user.user.is_anonymous: #.is_anonymous:
             await self.close()
             return
 
@@ -38,22 +38,18 @@ class EtablissementConsumer(AsyncJsonWebsocketConsumer):
         eid = self.etab_id #id de l'etablissement
         
         # Vérification pour le Staff (via modèle Occupe)
-        if Occupe.objects.filter(staff__email=self.user.email, etablissement_id=eid, is_active=True).exists():
+        if Occupe.objects.filter(staff__user__id=self.user.user.id, etablissement=eid, is_active=True).exists():
             return True
         
         # Vérification pour l'Enseignant (via modèle Enseigne)
-        if Enseigne.objects.filter(enseignant__email=self.user.email, etablissement_id=eid, is_active=True).exists():
+        if Enseigne.objects.filter(enseignant__user__id=self.user.user.id, etablissement=eid, is_active=True).exists():
             return True
             
         # Vérification pour l'Élève/Parent (via modèle Inscrit)
         # On vérifie si l'email de l'user correspond à l'un des parents
         if Inscrit.objects.filter(
-            eleve__email_parent_1=self.user.email, 
-            etablissement_id=eid, 
-            is_active=True
-        ).exists() or Inscrit.objects.filter(
-            eleve__email_parent_2=self.user.email, 
-            etablissement_id=eid, 
+            eleve__matricle=self.user.user.username, 
+            etablissement=eid, 
             is_active=True
         ).exists():
             return True
@@ -69,9 +65,15 @@ class EtablissementConsumer(AsyncJsonWebsocketConsumer):
 
     # Cette méthode reçoit les événements envoyés par le signal ci-dessus
     async def eleve_event(self, event):
+        # Envoie le message JSON au WebSocket du navigateur
         await self.send_json({
-            "category": "ELEVE_SYNC",
+            "type": "eleve_event",
             "action": event["action"],
-            "data": event.get("data"),
-            "eleve_id": event.get("eleve_id")
+            "data": event["data"]
         })
+        # await self.send_json({
+        #     "category": "ELEVE_SYNC",
+        #     "action": event["action"],
+        #     "data": event.get("data"),
+        #     "eleve_id": event.get("eleve_id")
+        # })
